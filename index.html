@@ -11758,8 +11758,43 @@ if('serviceWorker' in navigator){
       '<button id="testResetLv" style="padding:8px 10px;border-radius:8px;border:1px solid #FFD75E;background:rgba(255,215,94,.15);color:#FFD75E;font-size:11px">重置等級測試</button>'+
       '<button id="testAddXP" style="padding:8px 10px;border-radius:8px;border:1px solid #28E6C8;background:rgba(40,230,200,.15);color:#28E6C8;font-size:11px">+500 經驗</button>'+
       '<button id="testObBot" style="padding:8px 10px;border-radius:8px;border:1px solid #FF3B57;background:rgba(255,59,87,.15);color:#FF9CB0;font-size:11px">🤖 好友對戰 vs 虛擬對手</button>'+
-      '<button id="testLadBot" style="padding:8px 10px;border-radius:8px;border:1px solid #C455FF;background:rgba(196,85,255,.15);color:#E4B8FF;font-size:11px">🤖 天梯 vs AI（跳過配對）</button>';
+      '<button id="testLadBot" style="padding:8px 10px;border-radius:8px;border:1px solid #C455FF;background:rgba(196,85,255,.15);color:#E4B8FF;font-size:11px">🤖 天梯 vs AI（跳過配對）</button>'+
+      '<div style="margin-top:4px;padding:8px;border-radius:8px;border:1px solid #7DE3FF;background:rgba(125,227,255,.08)">'+
+        '<div style="color:#7DE3FF;font-size:11px;margin-bottom:6px">段位快轉</div>'+
+        '<select id="testRankJump" style="width:100%;padding:6px;border-radius:6px;border:1px solid #7DE3FF;background:#0A0510;color:#EDEFFA;font-size:11px;margin-bottom:6px"></select>'+
+        '<div style="display:flex;gap:6px">'+
+          '<button id="testRankGo" style="flex:1;padding:6px;border-radius:6px;border:1px solid #7DE3FF;background:rgba(125,227,255,.15);color:#7DE3FF;font-size:11px">套用</button>'+
+          '<button id="testRankAdd100" style="flex:1;padding:6px;border-radius:6px;border:1px solid #46FF9E;background:rgba(70,255,158,.15);color:#46FF9E;font-size:11px">+100分</button>'+
+        '</div>'+
+      '</div>';
     document.body.appendChild(dbg);
+
+    const rankSel=document.getElementById('testRankJump');
+    RANKS.forEach((rk,i)=>{
+      const opt=document.createElement('option');
+      opt.value=rk.min+30;
+      opt.textContent=rk.nm+'（'+rk.en+'，'+rk.min+'分起）';
+      rankSel.appendChild(opt);
+    });
+    function testGoToLadder(){
+      saveLadder();
+      if(typeof mmStop==='function') mmStop();
+      if(typeof arenaMMStop==='function') arenaMMStop();
+      show('scrLad');
+      if(typeof ladPaint==='function') ladPaint();
+    }
+    document.getElementById('testRankGo').onclick=()=>{
+      ladder.r=Math.max(0,Math.min(4000,parseInt(rankSel.value,10)));
+      ladder.peak=Math.max(ladder.peak,ladder.r);
+      testGoToLadder();
+      console.log('[TEST MODE] 天梯分數設為 '+ladder.r+'（'+rankOf(ladder.r).nm+'）。');
+    };
+    document.getElementById('testRankAdd100').onclick=()=>{
+      ladder.r=Math.max(0,Math.min(4000,ladder.r+100));
+      ladder.peak=Math.max(ladder.peak,ladder.r);
+      testGoToLadder();
+      console.log('[TEST MODE] 天梯分數 +100，目前 '+ladder.r+'（'+rankOf(ladder.r).nm+'）。');
+    };
 
     document.getElementById('testResetLv').onclick=()=>{
       account.lv=1; account.xp=0; saveAcct(); paintAcct();
