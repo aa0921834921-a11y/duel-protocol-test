@@ -249,6 +249,7 @@ h1.big .t2{background:linear-gradient(92deg,var(--me),var(--me2));
 .vs-l,.vs-r{flex:1;font-family:var(--mono);font-size:10.5px;letter-spacing:1.4px}
 .vs-l{color:color-mix(in srgb,var(--foe) 55%,#fff)}.vs-r{color:#8AF0DF;text-align:right}
 .turnmsg{font-weight:700;font-size:13px;letter-spacing:2px;white-space:nowrap}
+/* 天梯整場倒數用的小徽章 */
 .turntimer{display:flex;align-items:center;justify-content:center;gap:6px;margin:4px auto 0;
   width:fit-content;padding:3px 12px;border-radius:12px;font-family:var(--mono);
   font-size:11.5px;letter-spacing:1px;color:var(--dim);background:var(--panel);
@@ -259,6 +260,18 @@ h1.big .t2{background:linear-gradient(92deg,var(--me),var(--me2));
 .turntimer.danger{color:var(--foe);border-color:rgba(255,59,87,.6);animation:ttpulse 1s infinite}
 .turntimer.danger .ttdot{background:var(--foe)}
 @keyframes ttpulse{0%,100%{opacity:1}50%{opacity:.5}}
+/* 好友對戰每輪倒數用的長條，跟 vsbar 同寬，填充色由 JS 連續漸變計算 */
+.turnbar{position:relative;width:100%;height:22px;margin-top:6px;border-radius:8px;
+  overflow:hidden;background:rgba(0,0,0,.35);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.7),inset 0 0 0 1px rgba(130,95,55,.35)}
+.turnbar-fill{position:absolute;left:0;top:0;bottom:0;width:100%;
+  background:var(--grn);transition:width .4s linear,background-color .4s linear;
+  box-shadow:0 0 12px currentColor}
+.turnbar-txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:1.5px;color:#fff;
+  text-shadow:0 0 3px rgba(0,0,0,.9),0 0 6px rgba(0,0,0,.6)}
+.turnbar.pulse .turnbar-fill{animation:tbpulse 1s infinite}
+@keyframes tbpulse{0%,100%{opacity:1}50%{opacity:.55}}
 
 .battlelog{padding:10px 13px 11px}
 .log{margin-top:7px;max-height:210px;overflow-y:auto;font-family:var(--mono);font-size:14px;line-height:1.55;
@@ -2845,7 +2858,10 @@ body[data-phase="scrBoot"] #bootScene{display:block}
     </div>
 
     <div class="vsbar"><div class="vs-l" id="obVsL">對手回合</div><div class="turnmsg" id="obTurnMsg">…</div><div class="vs-r">你的回合</div></div>
-    <div class="turntimer" id="obTurnTimer" hidden><span class="ttdot"></span><span id="obTurnTimerTxt">02:00</span></div>
+    <div class="turnbar" id="obTurnTimer" hidden>
+      <div class="turnbar-fill" id="obTurnBarFill"></div>
+      <div class="turnbar-txt" id="obTurnTimerTxt">02:00</div>
+    </div>
 
     <div class="battlelog panel">
       <span class="ptitle">戰鬥紀錄 BATTLE LOG</span>
@@ -7571,14 +7587,36 @@ function obTimerStop(){
   if(obTimerId){ clearInterval(obTimerId); obTimerId=null; }
   const el=$('#obTurnTimer'); if(el) el.hidden=true;
 }
+/* 顏色錨點：滿血綠 → 剩 OB_WARN_S 秒時是黃 → 剩 OB_DANGER_S 秒時是紅，
+   兩個區間之間用 RGB 線性插值連續過渡，不是三種顏色說切就切。 */
+const OB_C_GREEN=[70,255,158], OB_C_AMBER=[255,197,61], OB_C_RED=[255,59,87];
+function obLerpRGB(a,b,t){
+  return [Math.round(a[0]+(b[0]-a[0])*t),Math.round(a[1]+(b[1]-a[1])*t),Math.round(a[2]+(b[2]-a[2])*t)];
+}
+function obTimerColor(s){
+  if(s>=OB_WARN_S){
+    const span=(OB_TURN_MS/1000)-OB_WARN_S;
+    const t=span>0?(s-OB_WARN_S)/span:1;
+    return obLerpRGB(OB_C_AMBER,OB_C_GREEN,Math.max(0,Math.min(1,t)));
+  } else if(s>=OB_DANGER_S){
+    const span=OB_WARN_S-OB_DANGER_S;
+    const t=span>0?(s-OB_DANGER_S)/span:1;
+    return obLerpRGB(OB_C_RED,OB_C_AMBER,Math.max(0,Math.min(1,t)));
+  }
+  return OB_C_RED;
+}
 function obTimerTick(){
-  const el=$('#obTurnTimer'), txt=$('#obTurnTimerTxt');
+  const el=$('#obTurnTimer'), txt=$('#obTurnTimerTxt'), fill=$('#obTurnBarFill');
   if(!OBC||OBC.st.over||OBC.st.ph!=='battle'){ obTimerStop(); return; }
   const left=Math.max(0,obTimerDeadline-Date.now());
   const s=Math.ceil(left/1000);
   txt.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
-  el.classList.toggle('warn', s<=OB_WARN_S&&s>OB_DANGER_S);
-  el.classList.toggle('danger', s<=OB_DANGER_S);
+  const pct=Math.max(0,Math.min(100,(left/OB_TURN_MS)*100));
+  const [r,g,b]=obTimerColor(left/1000);
+  fill.style.width=pct+'%';
+  fill.style.backgroundColor='rgb('+r+','+g+','+b+')';
+  fill.style.color='rgb('+r+','+g+','+b+')'; /* box-shadow 用 currentColor 帶光暈 */
+  el.classList.toggle('pulse', s<=10);
   if(left<=0){
     /* 時間到：如果現在輪到我，主動放棄這一輪；輪到對方的話等對方那邊自己逾時送出
        pass 訊息，我方收到後 obPaintBattle 會自動重新同步計時器，這裡不用額外處理。 */
@@ -11413,34 +11451,22 @@ if('serviceWorker' in navigator){
 }
 
 /* ================= 測試模式：全開（僅限 index_test.html） =================
-   目的：上架前手動測試操作流程用，把所有內容解鎖／拉滿，不用真的一路打過去。
-   刻意放在整個 script 最後才執行——這樣才能安全引用到 LEVELS/DUNS/CARDS/
-   SKINS/UPGRADES/TIER_IDS 等等寫在後面的 const 陣列，不會撞到 TDZ 錯誤。
-   正式版 index.html 完全沒有這段，不會影響上架版本的真實遊戲平衡。 */
+   正式版 index.html 完全沒有這段。 */
 (function testModeUnlockAll(){
   try{
-    // 1. 主線關卡：三個難度（explore/standard/brutal）全部解到最後一關、三星全滿
     TIER_IDS.forEach(t=>{ progress.tiers=progress.tiers||{}; progress.tiers[t]={unlocked:21, stars:Array(21).fill(3)}; });
     progress.unlocked=21; progress.stars=Array(21).fill(3);
     saveProg();
 
-    // 2. 帳號等級拉滿（目前存檔上限是 200，見 account.lv 的 clamp 邏輯）
     account.lv=200; account.xp=0; saveAcct(); paintAcct();
 
-    // 3. 貨幣拉滿（wallet.credits/shards 存檔時各自有數值上限，直接打到上限）
     wallet.credits=9999999; wallet.shards=999999;
-    // 3b. 外觀／永久強化全部視為已擁有
     wallet.owned=[].concat(SKINS.map(x=>x.id), UPGRADES.map(x=>x.id));
     saveWallet();
 
-    // 4. 天眼副本全部解鎖：DUNS 陣列裡各關卡的 lv 需求本來是用 account.lv 判斷，
-    //    上面已經把帳號等級拉到 200，所有 DUNS.lv（目前最高 22）自然全部解鎖。
-
-    // 5. 卡牌：62 張全部持有，每張都給足夠高的經驗與庫存張數（方便測強化/進化/合成）
     if(!TOS) TOS=tosLoad();
     TOS.own={};
     CARDS.forEach(c=>{ TOS.own[c.id]={ e:9999999, n:99 }; });
-    // 隊伍先湊前 5 張，方便直接進世界對戰測試，之後可以自己在背包換人
     TOS.team=CARDS.slice(0,5).map(c=>c.id);
     tosSave();
 
@@ -11461,13 +11487,6 @@ if('serviceWorker' in navigator){
     };
     document.getElementById('testAddXP').onclick=()=>{ addXP(500,'test'); };
 
-    /* ============ 好友對戰：本機虛擬對手 ============
-       不透過 Firebase／MQTT，直接建立兩個 obMakeCtx（我方 + 機器人），
-       兩邊的 sendRaw 互相呼叫對方的 obHandle（加一點隨機延遲模擬網路），
-       完全沿用正式的對戰邏輯（obActGuess/obFlip/回合計時器…），
-       跟真人連線測起來的行為一致，只是對手是本機自動出手的簡單 AI。
-       機器人的猜測策略很陽春（候選池隨機挑一個），純粹是為了讓你能測完
-       整個對戰流程與逾時放棄機制，不是要做一個真的很會猜的 AI。 */
     let OB_BOT_ON=false;
     function testBotPickGuess(BC){
       let pool=ALL;
@@ -11503,10 +11522,6 @@ if('serviceWorker' in navigator){
       }catch(e){ console.error('[TEST MODE] 建立好友對戰虛擬對手失敗：',e); }
     };
 
-    /* ============ 天梯：跳過配對，直接打 AI ============
-       正式配對邏輯是「等真人 20 秒，逾時才問要不要改標準對手」，測試時
-       每次都要等很浪費時間，這裡直接呼叫 pickFoe()+ladStart() 跳過等待，
-       效果等同玩家選了「改由標準對手參戰」。 */
     document.getElementById('testLadBot').onclick=()=>{
       try{
         if(typeof mmStop==='function') mmStop();
