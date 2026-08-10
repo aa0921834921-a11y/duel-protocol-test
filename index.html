@@ -10039,13 +10039,25 @@ function ladderFloor(){
   const rk=rankOf(ladder.r);
   return Math.max(ladder.floor, rk.min);
 }
+/* 單場分數變動上限：段位間距窄的地方（例如高段每階只差150分），
+   Glicko-2 在 rd 還很高時單場波動可能上百分，會一場跳過好幾個段位，
+   高段的段位感會被削弱。這裡把單場變動幅度鎖在「目前段位寬度」的一半內，
+   段位間距寬的地方（例如精鋼那 1300 分區間）波動可以大，窄的地方波動自動變小。 */
+function ladderMaxSwing(atR){
+  const rk=rankOf(atR), idx=RANKS.indexOf(rk);
+  const lo=rk.min, hi=RANKS[idx+1]?RANKS[idx+1].min:(rk.min+300);
+  return Math.max(40,Math.round((hi-lo)*.5));
+}
 function applyResult(foe,score,detail){
   const before=ladder.r, fl=ladderFloor();
   const out=g2(ladder.r,ladder.rd,ladder.vol,foe.r,60,score);
   /* halfMul：真人配對逾時、改打標準對手時的懲罰——
      只減半「這次分數移動了多少」，RD/vol 該怎麼收斂還是照 Glicko-2 正常算，
      否則玩家會發現一直打標準對手可以刷出異常穩定的分數不確定度。 */
-  const rNew=(detail&&detail.halfMul)?(before+arenaHalfDelta(out.r-before)):out.r;
+  const rawDelta=out.r-before;
+  const cap=ladderMaxSwing(before);
+  const cappedDelta=Math.max(-cap,Math.min(cap,rawDelta));
+  const rNew=(detail&&detail.halfMul)?(before+arenaHalfDelta(cappedDelta)):(before+cappedDelta);
   ladder.r=Math.max(fl,rNew);
   ladder.rd=out.rd; ladder.vol=out.vol;
   ladder.peak=Math.max(ladder.peak,ladder.r);
@@ -11753,8 +11765,19 @@ if('serviceWorker' in navigator){
     console.log('[TEST MODE] 全開完成。回合計時器已加速（好友對戰12秒/輪、天梯整場30秒）。');
 
     const dbg=document.createElement('div');
-    dbg.style.cssText='position:fixed;right:8px;bottom:8px;z-index:99999;display:flex;flex-direction:column;gap:6px;font-family:monospace;max-width:180px';
+    dbg.style.cssText='position:fixed;z-index:99999;display:flex;flex-direction:column;gap:6px;font-family:monospace;max-width:180px;touch-action:none';
+    const savedPos=(function(){ try{ return JSON.parse(localStorage.getItem('__testPanelPos')||'null'); }catch(e){ return null; } })();
+    if(savedPos&&typeof savedPos.right==='number'&&typeof savedPos.bottom==='number'){
+      dbg.style.right=savedPos.right+'px'; dbg.style.bottom=savedPos.bottom+'px';
+    } else {
+      dbg.style.right='8px'; dbg.style.bottom='8px';
+    }
     dbg.innerHTML=
+      '<div id="testDragHandle" style="padding:8px 10px;border-radius:8px;border:1px solid #8B8FB8;background:rgba(139,143,184,.18);color:#C4C8E8;font-size:11px;display:flex;align-items:center;justify-content:space-between;cursor:grab;user-select:none">'+
+        '<span>⋮⋮ 測試工具（拖曳移動）</span>'+
+        '<span id="testDragCollapse" style="cursor:pointer;padding:0 4px">▾</span>'+
+      '</div>'+
+      '<div id="testDragBody" style="display:flex;flex-direction:column;gap:6px">'+
       '<button id="testResetLv" style="padding:8px 10px;border-radius:8px;border:1px solid #FFD75E;background:rgba(255,215,94,.15);color:#FFD75E;font-size:11px">重置等級測試</button>'+
       '<button id="testAddXP" style="padding:8px 10px;border-radius:8px;border:1px solid #28E6C8;background:rgba(40,230,200,.15);color:#28E6C8;font-size:11px">+500 經驗</button>'+
       '<button id="testObBot" style="padding:8px 10px;border-radius:8px;border:1px solid #FF3B57;background:rgba(255,59,87,.15);color:#FF9CB0;font-size:11px">🤖 好友對戰 vs 虛擬對手</button>'+
@@ -11766,8 +11789,47 @@ if('serviceWorker' in navigator){
           '<button id="testRankGo" style="flex:1;padding:6px;border-radius:6px;border:1px solid #7DE3FF;background:rgba(125,227,255,.15);color:#7DE3FF;font-size:11px">套用</button>'+
           '<button id="testRankAdd100" style="flex:1;padding:6px;border-radius:6px;border:1px solid #46FF9E;background:rgba(70,255,158,.15);color:#46FF9E;font-size:11px">+100分</button>'+
         '</div>'+
+      '</div>'+
       '</div>';
     document.body.appendChild(dbg);
+
+    (function makeDraggable(){
+      const handle=document.getElementById('testDragHandle');
+      const body=document.getElementById('testDragBody');
+      const collapseBtn=document.getElementById('testDragCollapse');
+      let dragging=false, startX=0, startY=0, startRight=0, startBottom=0;
+      handle.addEventListener('pointerdown',e=>{
+        if(e.target===collapseBtn) return;
+        dragging=true; handle.setPointerCapture(e.pointerId);
+        handle.style.cursor='grabbing';
+        startX=e.clientX; startY=e.clientY;
+        startRight=parseFloat(dbg.style.right)||0;
+        startBottom=parseFloat(dbg.style.bottom)||0;
+      });
+      handle.addEventListener('pointermove',e=>{
+        if(!dragging) return;
+        const dx=e.clientX-startX, dy=e.clientY-startY;
+        let newRight=startRight-dx, newBottom=startBottom-dy;
+        const maxRight=window.innerWidth-40, maxBottom=window.innerHeight-40;
+        newRight=Math.max(-40,Math.min(maxRight,newRight));
+        newBottom=Math.max(-40,Math.min(maxBottom,newBottom));
+        dbg.style.right=newRight+'px'; dbg.style.bottom=newBottom+'px';
+      });
+      handle.addEventListener('pointerup',e=>{
+        if(!dragging) return;
+        dragging=false; handle.style.cursor='grab';
+        try{ handle.releasePointerCapture(e.pointerId); }catch(err){}
+        try{ localStorage.setItem('__testPanelPos',JSON.stringify({
+          right:parseFloat(dbg.style.right)||0, bottom:parseFloat(dbg.style.bottom)||0
+        })); }catch(err){}
+      });
+      let collapsed=false;
+      collapseBtn.onclick=()=>{
+        collapsed=!collapsed;
+        body.style.display=collapsed?'none':'flex';
+        collapseBtn.textContent=collapsed?'▸':'▾';
+      };
+    })();
 
     const rankSel=document.getElementById('testRankJump');
     RANKS.forEach((rk,i)=>{
