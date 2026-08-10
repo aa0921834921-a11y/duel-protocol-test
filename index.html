@@ -265,8 +265,7 @@ h1.big .t2{background:linear-gradient(92deg,var(--me),var(--me2));
   overflow:hidden;background:rgba(0,0,0,.35);
   box-shadow:inset 0 1px 3px rgba(0,0,0,.7),inset 0 0 0 1px rgba(130,95,55,.35)}
 .turnbar-fill{position:absolute;left:0;top:0;bottom:0;width:100%;
-  background:var(--grn);transition:width .4s linear,background-color .4s linear;
-  box-shadow:0 0 12px currentColor}
+  background:var(--grn);box-shadow:0 0 12px currentColor}
 .turnbar-txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:1.5px;color:#fff;
   text-shadow:0 0 3px rgba(0,0,0,.9),0 0 6px rgba(0,0,0,.6)}
@@ -7582,9 +7581,9 @@ function obRow(name,color,g,A,B,isFoe){
 }
 let obTimerId=null, obTimerDeadline=0, obTimerLastMove=-1;
 const OB_TURN_MS=12000; /* 測試版加速：原本 120000（2分鐘），這裡改 12 秒方便測試 */
-const OB_WARN_S=6, OB_DANGER_S=3; /* 門檻等比例縮小，維持「剩一半變黃、剩1/4變紅」的節奏 */
+const OB_WARN_S=6, OB_DANGER_S=3;
 function obTimerStop(){
-  if(obTimerId){ clearInterval(obTimerId); obTimerId=null; }
+  if(obTimerId){ cancelAnimationFrame(obTimerId); obTimerId=null; }
   const el=$('#obTurnTimer'); if(el) el.hidden=true;
 }
 /* 顏色錨點：滿血綠 → 剩 OB_WARN_S 秒時是黃 → 剩 OB_DANGER_S 秒時是紅，
@@ -7605,29 +7604,35 @@ function obTimerColor(s){
   }
   return OB_C_RED;
 }
+let obTimerLastSec=-1;
 function obTimerTick(){
   const el=$('#obTurnTimer'), txt=$('#obTurnTimerTxt'), fill=$('#obTurnBarFill');
   if(!OBC||OBC.st.over||OBC.st.ph!=='battle'){ obTimerStop(); return; }
   const left=Math.max(0,obTimerDeadline-Date.now());
   const s=Math.ceil(left/1000);
-  txt.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  if(s!==obTimerLastSec){
+    obTimerLastSec=s;
+    txt.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+    el.classList.toggle('pulse', s<=10);
+  }
   const pct=Math.max(0,Math.min(100,(left/OB_TURN_MS)*100));
   const [r,g,b]=obTimerColor(left/1000);
   fill.style.width=pct+'%';
   fill.style.backgroundColor='rgb('+r+','+g+','+b+')';
   fill.style.color='rgb('+r+','+g+','+b+')'; /* box-shadow 用 currentColor 帶光暈 */
-  el.classList.toggle('pulse', s<=10);
   if(left<=0){
     /* 時間到：如果現在輪到我，主動放棄這一輪；輪到對方的話等對方那邊自己逾時送出
        pass 訊息，我方收到後 obPaintBattle 會自動重新同步計時器，這裡不用額外處理。 */
     if(OBC.st.turn===OBC.role && !OBC.st.pending && !OBC.st.pendScan) obActPass(OBC);
+    return; /* 已交給 obActPass 觸發下一輪的 obTimerSync，這裡不用再排下一影格 */
   }
+  obTimerId=requestAnimationFrame(obTimerTick);
 }
 function obTimerStart(){
   obTimerDeadline=Date.now()+OB_TURN_MS;
   const el=$('#obTurnTimer'); if(el) el.hidden=false;
-  if(obTimerId) clearInterval(obTimerId);
-  obTimerId=setInterval(obTimerTick,500);
+  if(obTimerId) cancelAnimationFrame(obTimerId);
+  obTimerLastSec=-1;
   obTimerTick();
 }
 /* 只有「真的換手了」（moveNo 變了）才重新起算 2 分鐘，避免同一輪畫面重繪
@@ -11470,7 +11475,7 @@ if('serviceWorker' in navigator){
     TOS.team=CARDS.slice(0,5).map(c=>c.id);
     tosSave();
 
-    console.log('[TEST MODE] 全開完成：關卡/副本已解鎖、貨幣拉滿、62 張卡全持有並給滿經驗與庫存。回合計時器已加速（好友對戰12秒/輪、天梯整場30秒）。');
+    console.log('[TEST MODE] 全開完成。回合計時器已加速（好友對戰12秒/輪、天梯整場30秒）。');
 
     const dbg=document.createElement('div');
     dbg.style.cssText='position:fixed;right:8px;bottom:8px;z-index:99999;display:flex;flex-direction:column;gap:6px;font-family:monospace;max-width:180px';
@@ -11483,7 +11488,7 @@ if('serviceWorker' in navigator){
 
     document.getElementById('testResetLv').onclick=()=>{
       account.lv=1; account.xp=0; saveAcct(); paintAcct();
-      console.log('[TEST MODE] 等級已重置為 1，可以開始測試升級／經驗條動畫。');
+      console.log('[TEST MODE] 等級已重置為 1。');
     };
     document.getElementById('testAddXP').onclick=()=>{ addXP(500,'test'); };
 
@@ -11518,7 +11523,7 @@ if('serviceWorker' in navigator){
         obActReady(BOTC, ALL[Math.floor(Math.random()*ALL.length)].slice());
         obRoomUIReset(); show('scrOnlineRoom');
         testBotLoop(BOTC);
-        console.log('[TEST MODE] 已建立本機虛擬對手房間，設定好你的密碼、按下準備即可開戰。');
+        console.log('[TEST MODE] 已建立本機虛擬對手房間。');
       }catch(e){ console.error('[TEST MODE] 建立好友對戰虛擬對手失敗：',e); }
     };
 
