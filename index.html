@@ -11627,6 +11627,7 @@ function tosSkill(i){
 }
 function tosWin(){
   const B=tosB, d=B.dun;
+  taskProgress('raid',1);
   if(squadRun){
     /* 戰隊挑戰只計成績，不給掉落與經驗——否則它會變成刷素材的最佳路徑，
        蓋掉一般副本的存在意義。 */
@@ -11674,6 +11675,7 @@ function tosWin(){
 }
 function tosLose(){
   const B=tosB;
+  taskProgress('raid',1);
   sLose(); vib([70,90,70]);
   card.innerHTML='<div class="status no">/// DEFEAT ///</div><h2>隊伍全滅</h2>'+
     '<p class="desc">撐到第 '+(B.waveIx+1)+' 波。<br>試試<b>換屬性克制的隊伍</b>、把卡片練高，或更謹慎地推理。</p>'+
