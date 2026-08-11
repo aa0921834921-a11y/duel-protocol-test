@@ -622,7 +622,14 @@ body[data-phase="scrBoot"] #bootScene{display:block}
   animation:blink 6.5s ease-in-out infinite}
 /* 真實圖檔卡（唯一卡）：沿用 .eye 的容器尺寸與圓角規則，
    但不要套用瞳孔專屬的「眨眼」擠壓動畫，圖本身已經有完整演出。 */
+/* 這個 .eyeart 只給「小圖示」場合用（合成結果、天梯降臨演出、選卡格子裡的小圖），
+   那些地方維持原本 1:1 正方形裁切就是對的，問題不在這裡。真正「沒滿版」的是
+   圖鑑大卡格——那邊需要完全不管長寬比、直接貼滿整張卡，所以另外用更明確的
+   選擇器覆寫，只影響圖鑑卡格，不會波及這裡的小圖示。 */
 .eyeart{object-fit:cover;object-position:50% 42%;border-radius:10%;animation:none!important}
+/* 圖鑑大卡格：忽略長寬比、強制貼滿容器四個邊，才是真正的滿版。 */
+.cd.artcard .ce .eyeart{position:absolute;inset:0;width:100%;height:100%;
+  aspect-ratio:auto;object-fit:cover;object-position:50% 40%;border-radius:inherit}
 /* Safari 在 flex 版面中會把只設寬度的 SVG 高度算成 0，容器一律補上長寬比與 flex:none */
 .seye,.ce,.sbe,.ge,.de,.ave,.pe,.te{aspect-ratio:1/1;flex:none}
 @keyframes blink{0%,94%,100%{transform:scaleY(1)}96.5%{transform:scaleY(.06)}}
@@ -7182,20 +7189,12 @@ function omniDo(){
 }
 function omniResult(res){
   const got=res.card;
-  /* 這裡自己就是一個完整的結果畫面了，不要再疊加一次 legendShow()——
-     那個函式會「再讀一次同一張卡圖」＋「再生 48 個粒子動畫」，
-     等於同時間播兩套滿版特效、同一張大圖解碼兩次，
-     在手機瀏覽器上很容易直接把分頁記憶體榨爆、整頁當機。 */
-  card.innerHTML='<div class="status gold">/// 唯一合成 · 成功 ///</div>'+
-    '<h2 style="color:'+ELEMS[got.el].c+'">'+esc(got.nm)+'</h2>'+
-    '<div style="width:130px;margin:6px auto 8px" id="fgOmniEye"></div>'+
-    '<p class="desc">耗盡 '+res.used.map(esc).join('、')+' 各 1 張，鑄成全服僅能持有一張的'+
-    '<b style="color:var(--gold)">'+got.st+'★ 唯一卡</b>。</p>'+
-    '<div class="btnrow"><button class="btn pri" id="fgOmniA">太好了</button></div>';
-  overlay.hidden=false;
-  mountEye('#fgOmniEye',got.id,'fgOmni','none');
-  sStar(0); sStar(1); vib([40,70,40,70,220]); burst(ELEMS[got.el].c);
-  $('#fgOmniA').onclick=()=>{ overlay.hidden=true; bagFusion(); };
+  /* 唯一卡目前先借用「6★ 降臨」既有的完整演出（粒子、六星逐一彈出、音效層次），
+     之後想到專屬的演出效果再回來換掉——重點是全程只有這一套特效、
+     只讀一次卡圖，不會像先前那樣兩套疊在一起播、把記憶體榨爆。 */
+  const fin=()=>{ try{ bagFusion(); }catch(e){ overlay.hidden=true; renderBag(); } };
+  try{ legendShow(got,fin); }
+  catch(e){ console.error('[omniResult]',e); fin(); }
 }
 
 /* 某星級目前有多少張閒置素材 */
