@@ -1648,7 +1648,11 @@ body[data-phase="scrBoot"] #bootScene{display:block}
 /* 有真實圖檔的卡（唯一卡）：圖本身就是完整卡面設計，直接滿版鋪滿整張卡，
    名稱／等級／星星都疊在圖片最下緣，靠一層漸層黑幕保持可讀性——
    而不是像瞳孔卡那樣圖只佔 74% 寬、名稱等級另外排在下面留白。 */
-.cd.artcard{padding:0}
+/* 圖片本身裁完是 0.857 的比例（比較接近正方形），
+   卡格卻是 3:4（比較窄長）——硬塞進去，四個角落貼在邊緣的屬性徽章
+   就會被裁掉。這裡讓有真實圖檔的卡格直接改用圖片本身的真實比例，
+   裁切量趨近於 0，才不會再切到內容。 */
+.cd.artcard{padding:0;aspect-ratio:1024/1195}
 .cd.artcard .ce{position:absolute;inset:0;width:100%;height:100%;border-radius:11px;z-index:1}
 .cd.artcard::after{content:'';position:absolute;inset:0;border-radius:11px;z-index:2;pointer-events:none;
   background:linear-gradient(180deg,rgba(0,0,0,0) 52%,rgba(0,0,0,.6) 76%,rgba(0,0,0,.92) 100%)}
@@ -1661,15 +1665,20 @@ body[data-phase="scrBoot"] #bootScene{display:block}
 /* 卡面流光：不是整片斜向掃過整張卡，而是光只沿著卡面本來就畫好的
    那幾道彩色光線（火橙／水藍／木綠／光金／暗紫）流動——用一張從卡圖
    本身分析出的「彩色光線遮罩」把移動的亮帶裁出形狀，只有壓在那幾道
-   線上的部分會發亮，其餘卡面完全不受影響。iOS 用 -webkit-mask-image。 */
+   線上的部分會發亮，其餘卡面完全不受影響。iOS 用 -webkit-mask-image。
+   遮罩本身固定不動、只用 transform 移動裡面那條亮帶——
+   transform 是顯示卡直接加速的動畫屬性，跟原本用 background-position
+   位移（每一幀都要重新計算、容易在手機上卡頓跳針）完全不同量級的順暢度。 */
 .cd.artcard .cshine{position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:screen;
+  overflow:hidden;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
-  -webkit-mask-size:100% 100%;mask-size:100% 100%;
+  -webkit-mask-size:100% 100%;mask-size:100% 100%}
+.cd.artcard .cshine::before{content:'';position:absolute;top:-25%;bottom:-25%;left:-55%;width:70%;
   background:linear-gradient(115deg,
-    transparent 0%,transparent 40%,rgba(255,246,220,.95) 50%,transparent 60%,transparent 100%);
-  background-size:340% 340%;
+    transparent 0%,transparent 38%,rgba(255,246,220,.95) 50%,transparent 62%,transparent 100%);
+  will-change:transform;
   animation:artFlow 3.6s linear infinite}
-@keyframes artFlow{0%{background-position:135% 100%}100%{background-position:-35% 0%}}
+@keyframes artFlow{0%{transform:translateX(-10%)}100%{transform:translateX(220%)}}
 .cd .cn{font-size:9px;font-weight:700;color:var(--cc);text-align:center;line-height:1.1}
 .cd .cl{font-family:var(--mono);font-size:8px;color:#A8ADD4}
 /* 星等改成直接畫出對應顆數的星星，比「6★」這種文字一眼就分得出高低。
