@@ -11116,9 +11116,16 @@ function squadStart(){
   const blocked=squadCheck();
   if(blocked){ sMiss(); vib([18,40,18]); return; }
   const cap=squadCap(), bs=squadBoss();
+  /* 戰隊天梯數值全面標準化，敵方傷害基準也比照玩家標準化後的 HP 反推，
+     而不是沿用一般副本寫死的 edmg —— 否則這裡漏了這個欄位，
+     敵人攻擊力／扣血全部算成 undefined*數字＝NaN。 */
+  const wasLM=ladderMode; ladderMode=true;
+  const S=teamStats();
+  ladderMode=wasLM;
+  const edmg=Math.max(20,Math.round((S.hp||2000)*.08));
   tosStart({
     id:'squad_'+squadWeekNo(), nm:'戰隊天梯 · '+cap.nm,
-    el:bs.el, lv:1, ref:0, drop:0,
+    el:bs.el, lv:1, ref:0, edmg:edmg, drop:0,
     waves:bs.waves.map(t=>[t,bs.el]),
     ds:cap.ds
   },true);                               /* 戰隊天梯一律標準化 */
