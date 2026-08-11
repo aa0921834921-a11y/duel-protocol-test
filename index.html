@@ -1638,9 +1638,25 @@ body[data-phase="scrBoot"] #bootScene{display:block}
   content-visibility:auto;contain-intrinsic-size:auto 112px}
 .cd.sel{box-shadow:0 0 0 2px var(--cc),0 0 18px -4px var(--cc)}
 .cd .ce{width:74%}
-/* 有真實圖檔的卡（唯一卡）：圖本身就是完整卡面設計（含邊框、光效），
-   不該再套用給程式畫瞳孔用的 74% 縮小置中規則，否則看起來像小圖片飄在大卡片裡。 */
-.cd.artcard .ce{width:96%;border-radius:8%}
+/* 有真實圖檔的卡（唯一卡）：圖本身就是完整卡面設計，直接滿版鋪滿整張卡，
+   名稱／等級／星星都疊在圖片最下緣，靠一層漸層黑幕保持可讀性——
+   而不是像瞳孔卡那樣圖只佔 74% 寬、名稱等級另外排在下面留白。 */
+.cd.artcard{padding:0}
+.cd.artcard .ce{position:absolute;inset:0;width:100%;height:100%;border-radius:11px;z-index:1}
+.cd.artcard::after{content:'';position:absolute;inset:0;border-radius:11px;z-index:2;pointer-events:none;
+  background:linear-gradient(180deg,rgba(0,0,0,0) 52%,rgba(0,0,0,.6) 76%,rgba(0,0,0,.92) 100%)}
+.cd.artcard .cnl{position:absolute;left:4%;right:4%;bottom:15%;z-index:3;display:flex;
+  align-items:baseline;justify-content:center;gap:4px;white-space:nowrap;overflow:hidden}
+.cd.artcard .cnl .cnx{font-size:8.6px;font-weight:700;color:var(--gold);text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.cd.artcard .cnl .clx{font-family:var(--mono);font-size:7.4px;color:#E4E6FA;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.cd.artcard .cst{bottom:3%;z-index:3}
+.cd.artcard .cq,.cd.artcard .cx{z-index:4}
+/* 卡面流光：跟其他高星卡呼應的動態感，一道柔光斜向掃過整張卡，循環播放 */
+.cd.artcard .cshine{position:absolute;top:-15%;bottom:-15%;left:-40%;width:34%;z-index:2;
+  pointer-events:none;mix-blend-mode:screen;
+  background:linear-gradient(100deg,rgba(255,255,255,0) 0%,rgba(255,246,220,.4) 50%,rgba(255,255,255,0) 100%);
+  animation:artShine 4.2s ease-in-out infinite}
+@keyframes artShine{0%,18%{left:-40%}70%,100%{left:130%}}
 .cd .cn{font-size:9px;font-weight:700;color:var(--cc);text-align:center;line-height:1.1}
 .cd .cl{font-family:var(--mono);font-size:8px;color:#A8ADD4}
 /* 星等改成直接畫出對應顆數的星星，比「6★」這種文字一眼就分得出高低。
@@ -6917,61 +6933,67 @@ $('#btnGachaBack2').onclick=gachaBack;
 /* 6★ 期望約 95 抽才會出現一張，值得一場全螢幕演出 */
 function legendShow(c,onDone){
   const el=$('#legend'); if(!el){ onDone&&onDone(); return; }
-  const col=ELEMS[c.el].c;
-  let parts='';
-  for(let i=0;i<48;i++){
-    const a=Math.random()*Math.PI*2, d=110+Math.random()*420;
-    parts+='<i class="lgP" style="--dx:'+(Math.cos(a)*d).toFixed(0)+'px;--dy:'+
-      (Math.sin(a)*d).toFixed(0)+'px;width:'+(2+Math.random()*5).toFixed(1)+'px;height:'+
-      (2+Math.random()*5).toFixed(1)+'px;background:'+(i%3?'#FFE9A8':col)+
-      ';animation-delay:'+(.3+Math.random()*.9).toFixed(2)+'s"></i>';
-  }
-  /* 六顆星逐一彈出，最後一顆落定才是完成 */
-  let stars='';
-  for(let i=0;i<6;i++) stars+='<i style="animation-delay:'+(1.05+i*.1).toFixed(2)+'s">★</i>';
-  el.style.setProperty('--lc',col);
-  el.innerHTML='<div class="lgSky" style="--lc:'+col+'"></div>'+
-    '<div class="lgAurora"></div>'+
-    '<div class="lgRays"></div><div class="lgRays2" style="--lc:'+col+'"></div>'+
-    '<div class="lgPillar"></div>'+
-    '<div class="lgFlash"></div>'+
-    '<div class="lgWave"></div><div class="lgWave w2"></div>'+
-    '<div class="lgWave w3"></div><div class="lgWave w4"></div>'+
-    parts+
-    '<div class="lgVig"></div>'+
-    '<div class="lgBox" style="--lc:'+col+'">'+
-      '<div class="lgTag">LEGENDARY　DESCENT</div>'+
-      '<div class="lgEyeWrap" id="lgEye"></div>'+
-      '<div class="lgStars">'+stars+'</div>'+
-      '<div class="lgName">'+esc(c.nm)+'</div>'+
-      '<div class="lgSub">'+ELEMS[c.el].nm+'屬性　·　最高稀有度</div>'+
-      '<div class="lgHint">點擊畫面繼續</div>'+
-    '</div>';
-  el.classList.add('on');
-  try{ mountEye('#lgEye',c.id,'lg'+c.id,'full'); }catch(e){}
-  /* 分層音效與震動，堆出「終於出了」的重量感 */
-  sStar(0); setTimeout(()=>sStar(1),180); setTimeout(()=>sStar(2),360);
-  setTimeout(()=>{ sWin(); burst(col); },700);
-  setTimeout(()=>burst('#FFD75E'),1100);
-  setTimeout(()=>{ burst('#FFF6DC'); sStar(3); },1500);
-  vib([40,60,40,60,40,80,60,60,260]);
+  /* 保險機制（9 秒後自動關閉）過去是寫在函式最後一行——
+     如果前面組字串／掛動畫任何一步噴錯，函式會整個中斷，
+     保險機制根本沒被排進去，畫面就會永遠卡住、只能重新整理頁面。
+     現在把整段演出包進 try/catch，不管哪裡出包，都保證會關閉遮罩、
+     叫用 onDone，不會再出現「怎麼等都沒用」的死畫面。 */
   let done=false;
-  const close=()=>{
+  const bail=()=>{
     if(done) return; done=true;
-    el.classList.remove('on'); el.innerHTML='';
-    el.removeEventListener('click',close);
-    /* onDone 通常是合成／抽卡的結算畫面——它若在渲染時出錯，
-       演出遮罩已經收掉了，不能讓整個畫面就這樣卡在一片黑，
-       至少要能退回背包，而不是要玩家重新整理頁面。 */
+    try{ el.classList.remove('on'); el.innerHTML=''; }catch(e2){}
     try{ onDone&&onDone(); }
-    catch(e){
-      console.error('[legendShow onDone]',e);
-      try{ overlay.hidden=true; renderBag(); }catch(e2){}
+    catch(e3){
+      console.error('[legendShow onDone]',e3);
+      try{ overlay.hidden=true; renderBag(); }catch(e4){}
     }
   };
-  /* 演出結束前不讓誤觸跳過，避免抽了 95 抽卻只看到一瞬間 */
-  setTimeout(()=>el.addEventListener('click',close),1600);
-  setTimeout(close,9000);
+  try{
+    const col=ELEMS[c.el].c;
+    let parts='';
+    for(let i=0;i<48;i++){
+      const a=Math.random()*Math.PI*2, d=110+Math.random()*420;
+      parts+='<i class="lgP" style="--dx:'+(Math.cos(a)*d).toFixed(0)+'px;--dy:'+
+        (Math.sin(a)*d).toFixed(0)+'px;width:'+(2+Math.random()*5).toFixed(1)+'px;height:'+
+        (2+Math.random()*5).toFixed(1)+'px;background:'+(i%3?'#FFE9A8':col)+
+        ';animation-delay:'+(.3+Math.random()*.9).toFixed(2)+'s"></i>';
+    }
+    /* 六顆星逐一彈出，最後一顆落定才是完成 */
+    let stars='';
+    for(let i=0;i<6;i++) stars+='<i style="animation-delay:'+(1.05+i*.1).toFixed(2)+'s">★</i>';
+    el.style.setProperty('--lc',col);
+    el.innerHTML='<div class="lgSky" style="--lc:'+col+'"></div>'+
+      '<div class="lgAurora"></div>'+
+      '<div class="lgRays"></div><div class="lgRays2" style="--lc:'+col+'"></div>'+
+      '<div class="lgPillar"></div>'+
+      '<div class="lgFlash"></div>'+
+      '<div class="lgWave"></div><div class="lgWave w2"></div>'+
+      '<div class="lgWave w3"></div><div class="lgWave w4"></div>'+
+      parts+
+      '<div class="lgVig"></div>'+
+      '<div class="lgBox" style="--lc:'+col+'">'+
+        '<div class="lgTag">LEGENDARY　DESCENT</div>'+
+        '<div class="lgEyeWrap" id="lgEye"></div>'+
+        '<div class="lgStars">'+stars+'</div>'+
+        '<div class="lgName">'+esc(c.nm)+'</div>'+
+        '<div class="lgSub">'+ELEMS[c.el].nm+'屬性　·　最高稀有度</div>'+
+        '<div class="lgHint">點擊畫面繼續</div>'+
+      '</div>';
+    el.classList.add('on');
+    try{ mountEye('#lgEye',c.id,'lg'+c.id,'full'); }catch(e){}
+    /* 分層音效與震動，堆出「終於出了」的重量感 */
+    sStar(0); setTimeout(()=>sStar(1),180); setTimeout(()=>sStar(2),360);
+    setTimeout(()=>{ sWin(); burst(col); },700);
+    setTimeout(()=>burst('#FFD75E'),1100);
+    setTimeout(()=>{ burst('#FFF6DC'); sStar(3); },1500);
+    vib([40,60,40,60,40,80,60,60,260]);
+    /* 演出結束前不讓誤觸跳過，避免抽了 95 抽卻只看到一瞬間 */
+    setTimeout(()=>el.addEventListener('click',bail),1600);
+    setTimeout(bail,9000);
+  }catch(e){
+    console.error('[legendShow setup]',e);
+    bail();
+  }
 }
 /* GC-CORE-END */
 
@@ -7039,12 +7061,19 @@ function renderBagCards(){
   $('#bagEmpty').style.display=list.length?'none':'';
   g.innerHTML=list.map(c=>{
     const inTeam=TOS.team.indexOf(c.id), n=TOS.own[c.id].n||1, sp=spareN(c.id);
-    return '<div class="cd s'+c.st+' el-'+c.el+(inTeam>=0?' sel':'')+(CARD_ART[c.id]?' artcard':'')+'" data-id="'+c.id+
+    const hasArt=!!CARD_ART[c.id];
+    /* 有真實圖檔的卡：名稱＋等級合併成一行、疊在卡片底部（跟 CSS 的 .artcard 版面對應），
+       不再像瞳孔卡那樣各佔一行、排在圖示下方另留空間。 */
+    const nameBlock=hasArt
+      ? '<div class="cnl"><span class="cnx">'+esc(c.nm)+'</span><span class="clx">Lv'+cardLv(c.id)+'</span></div>'
+      : '<div class="cn">'+esc(c.nm)+'</div><div class="cl">Lv'+cardLv(c.id)+'</div>';
+    return '<div class="cd s'+c.st+' el-'+c.el+(inTeam>=0?' sel':'')+(hasArt?' artcard':'')+'" data-id="'+c.id+
       '" style="--cc:'+ELEMS[c.el].c+'">'+
       cardBG(c)+starRow(c.st)+
       (inTeam>=0?'<span class="cq">'+(inTeam+1)+'</span>':'')+
       '<div class="ce" id="bgz_'+c.id+'"></div>'+
-      '<div class="cn">'+esc(c.nm)+'</div><div class="cl">Lv'+cardLv(c.id)+'</div>'+
+      (hasArt?'<div class="cshine" aria-hidden="true"></div>':'')+
+      nameBlock+
       (n>1?'<span class="cx'+(sp>0?'':' none')+'">×'+n+'</span>':'')+
       s6FX(c.st)+
       '</div>';
@@ -11306,14 +11335,20 @@ function tosOpenPick(){
   const g=$('#tosCards'); g.innerHTML='';
   owned.forEach(c=>{
     const inTeam=TOS.team.indexOf(c.id);
+    const hasArt=!!CARD_ART[c.id];
     const el=document.createElement('div');
-    el.className='cd s'+c.st+' el-'+c.el+(inTeam>=0?' sel':'')+(CARD_ART[c.id]?' artcard':'');
+    el.className='cd s'+c.st+' el-'+c.el+(inTeam>=0?' sel':'')+(hasArt?' artcard':'');
     el.dataset.id=c.id;                       /* tosSyncMarks 靠這個做增量更新 */
     el.style.setProperty('--cc',ELEMS[c.el].c);
+    /* 同一套「名稱＋等級合併一行、疊在底部」規則，跟圖鑑列表一致 */
+    const nameBlock=hasArt
+      ? '<div class="cnl"><span class="cnx">'+esc(c.nm)+'</span><span class="clx">Lv'+cardLv(c.id)+'</span></div>'
+      : '<div class="cn">'+esc(c.nm)+'</div><div class="cl">Lv'+cardLv(c.id)+'</div>';
     el.innerHTML=cardBG(c)+starRow(c.st)+
       (inTeam>=0?'<span class="cq">'+(inTeam+1)+'</span>':'')+
       '<div class="ce" id="cdz_'+c.id+'"></div>'+
-      '<div class="cn">'+esc(c.nm)+'</div><div class="cl">Lv'+cardLv(c.id)+'</div>'+
+      (hasArt?'<div class="cshine" aria-hidden="true"></div>':'')+
+      nameBlock+
       ((TOS.own[c.id].n||1)>1?'<span class="cx'+(spareN(c.id)>0?'':' none')+'">×'+
         (TOS.own[c.id].n||1)+'</span>':'')+
       s6FX(c.st);
